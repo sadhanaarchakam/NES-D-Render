@@ -64,7 +64,7 @@ app.layout = dbc.Container([
                     dcc.Dropdown(
                         id="industry-dropdown",
                         options=[{"label": industry, "value": industry} for industry in 
-                                 table1.groupby("NAICS2017_LABEL")["RCPNOPD"].sum().nlargest(7).index] +
+                                sorted(table1["NAICS2017_LABEL"].unique())] +
                                 [{"label": "All Industries", "value": "All"}],
                         value="All",
                         clearable=False
