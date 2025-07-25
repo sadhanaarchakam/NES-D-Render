@@ -20,6 +20,7 @@ table_owner["OWNNOPD"] = pd.to_numeric(table_owner["OWNNOPD"], errors='coerce')
 # -------------Initialize Dash app----------#
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.MINTY]) # choose theme
 app.title = "Nonemployer Experimental Data Dashboard"
+server = app.server
 
 
 #-----Add Bootstrap Wrapper for layout---#
