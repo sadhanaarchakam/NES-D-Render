@@ -28,7 +28,7 @@ app.layout = dbc.Container([
 
     # --- Header/Navbar --- #
     dbc.NavbarSimple(
-        brand="NES-D Dashboard: Nonemployer Firms by Demographics",
+        brand=html.Strong("NES-D Dashboard: Nonemployer Firms by Demographics"),
         style={"borderRadius": "10px"},
         color="primary",
         dark=True,
@@ -207,8 +207,8 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
             group_cols[0]: group_by.replace("_LABEL", "").replace("_", " ").title(),
             group_cols[1] if len(group_cols) > 1 else "": color_group.replace("_LABEL", "").replace("_", " ").title() if color_group else None
         },
-        title=f"{y_axis_labels.get(y_metric, y_metric)} by {group_by.replace('_LABEL', '').title()}" +
-              (f" and Colored by {color_group.replace('_LABEL', '').title()}" if color_group and color_group != group_by else ""),
+        title=f"{y_axis_labels.get(y_metric, y_metric)} by {group_by.replace('_LABEL', '').replace('_', ' ').title()}" +
+              (f" and Colored by {color_group.replace('_LABEL', '').replace('_', ' ').title()}" if color_group and color_group != group_by else ""),
         color_discrete_sequence=px.colors.qualitative.Safe
     )
 
