@@ -29,7 +29,7 @@ owner_label_map = {
 }
 
 # -------------Initialize Dash app----------#
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.MINTY]) # choose theme
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP]) # choose theme
 app.title = "Nonemployer Experimental Data Dashboard"
 server = app.server
 
@@ -41,7 +41,7 @@ app.layout = dbc.Container([
     dbc.NavbarSimple(
         brand=html.Strong("NES-D Dashboard: Nonemployer Firms by Demographics"),
         style={"borderRadius": "10px"},
-        color="primary",
+        color="#1A73E8",
         dark=True,
         fluid=True
     ),
@@ -54,7 +54,7 @@ app.layout = dbc.Container([
         dbc.CardHeader(
         "Filter Options",
         style={
-            "backgroundColor": "#a1e3d0", # b4f0de
+            "backgroundColor": "#1A73E8",
             "color": "white"
         }, className="shadow-sm"),
         dbc.CardBody([
@@ -97,7 +97,7 @@ app.layout = dbc.Container([
                 ], md=4),
 
                 dbc.Col([
-                    html.Label("Select Demographic Group for Bar Graph (X-Axis):"),
+                    html.Label("Select Demographic (X-Axis):"),
                     dcc.Dropdown(
                         id='bar-dem-dropdown',
                         options=[{'label': l.replace("_LABEL", "").replace("_", " ").title(), "value": l} for l in dem_labels],
@@ -107,7 +107,7 @@ app.layout = dbc.Container([
                 ], md=4),
 
                 dbc.Col([
-                    html.Label("Select Measure for Bar Graph (Y-Axis):"),
+                    html.Label("Select Measure (Y-Axis):"),
                     dcc.Dropdown(
                         id='yaxis-metric-dropdown',
                         options=[
