@@ -17,6 +17,17 @@ dem_labels = ["SEX_LABEL", "RACE_GROUP_LABEL", "ETH_GROUP_LABEL", "FOREIGN_BORN_
 table_owner = pd.read_excel("table_O1_new.xlsx")
 table_owner["OWNNOPD"] = pd.to_numeric(table_owner["OWNNOPD"], errors='coerce')
 
+owner_label_map = {
+    "SEX_LABEL": "OWNER_SEX_LABEL",
+    "RACE_GROUP_LABEL": "OWNER_RACE_LABEL",
+    "ETH_GROUP_LABEL": "OWNER_ETH_LABEL",
+    "VET_GROUP_LABEL": "OWNER_VET_LABEL",
+    "FOREIGN_BORN_GROUP_LABEL": "OWNER_FOREIGN_BORN_LABEL",
+    "W2_GROUP_LABEL": "OWNER_W2_LABEL",
+    "AGE_LABEL": "OWNER_AGE_LABEL",
+    "USCITIZEN_LABEL": "OWNER_USCITIZEN_LABEL"
+}
+
 # -------------Initialize Dash app----------#
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.MINTY]) # choose theme
 app.title = "Nonemployer Experimental Data Dashboard"
@@ -137,27 +148,17 @@ app.layout = dbc.Container([
 
 #------------------- Create Plot Functions ---------------#
 def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_PER_FIRM", color_group=None):
-    # owner labels:
-
-    owner_label_map = {
-        "SEX_LABEL": "OWNER_SEX_LABEL",
-        "RACE_GROUP_LABEL": "OWNER_RACE_LABEL",
-        "ETH_GROUP_LABEL": "OWNER_ETH_LABEL",
-        "VET_GROUP_LABEL": "OWNER_VET_LABEL",
-        "FOREIGN_BORN_GROUP_LABEL": "OWNER_FOREIGN_BORN_LABEL",
-        "W2_GROUP_LABEL": "OWNER_W2_LABEL"
-    }
-
+    
 
     if y_metric == "OWNNOPD":
         df = table_owner.copy()
+
         df = df[df["OWNER_RACE_LABEL"] != "All owners of nonemployer firms"]
         df["OWNER_SEX_LABEL"] = df["OWNER_SEX_LABEL"].str.replace("OWNER_SEX_LABEL=", "")
 
+        
         group_by_owner = owner_label_map.get(group_by, group_by)
         color_group_owner = owner_label_map.get(color_group, color_group) if color_group else None
-
-        # removing totals:
         
         if group_by_owner in df.columns:
             df = df[df[group_by_owner] != "All owners of nonemployer firms"]
@@ -266,17 +267,19 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
 def update_line_plot(selected_industry, y_metric):
     if y_metric == "OWNNOPD":
         df = table_owner.copy()
-        df = df[df["OWNER_RACE_LABEL"] != "All owners of nonemployer firms"]
 
-        # removing NAICS "total for all sectors" - maybe?
+        df = df[df["OWNER_RACE_LABEL"] != "All owners of nonemployer firms"]
         df = df[df["NAICS2017_LABEL"] != "Total for all sectors"]
 
-        value_col = "OWNNOPD"                                                                                                                                                                                                      
-        label = "Owner Counts"
+        for base_col, owner_col in owner_label_map.items():
+            if owner_col in df.columns and df[owner_col].nunique() > 1:
+                df = df[df[owner_col] != "All owners of nonemployer firms"]
 
         if selected_industry and selected_industry != "All":
             df = df[df["NAICS2017_LABEL"] == selected_industry]
-        
+
+        value_col = "OWNNOPD"                                                                                                                                                                                                      
+        label = "Owner Counts"
     
         # Always group by both year and industry for line plot
         group_cols = ["YEAR", "NAICS2017_LABEL"]
@@ -287,13 +290,13 @@ def update_line_plot(selected_industry, y_metric):
             line_df,
             x="YEAR",
             y=value_col,
-            color="NAICS2017_LABEL" if "NAICS2017_LABEL" in line_df.columns else None,
+            color="NAICS2017_LABEL", 
             markers=True,
             title="Owner Counts Over Time",
             labels={
                 "YEAR": "Year",
                 value_col: label,
-                "NAICS2017_LABEL": "Industry" if "NAICS2017_LABEL" in line_df.columns else None
+                "NAICS2017_LABEL": "Industry" 
             },
             color_discrete_sequence=px.colors.qualitative.Safe
         )
@@ -301,13 +304,13 @@ def update_line_plot(selected_industry, y_metric):
     else:
         df = table1.copy()
 
-        # if selected_years:
-        #     if not isinstance(selected_years, list):
-        #         selected_years = [selected_years]
-        #     df = df[df["YEAR"].isin(selected_years)]
-
         if selected_industry and selected_industry != "All":
             df = df[df["NAICS2017_LABEL"] == selected_industry]
+        
+        # remove totals:
+        for col in dem_labels:
+            if col in df.columns and df[col].nunique() > 1:
+                df = df[df[col] != "Total"]
 
         value_col = y_metric
         label_map = {
