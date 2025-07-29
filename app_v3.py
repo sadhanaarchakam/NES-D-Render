@@ -36,7 +36,7 @@ app.layout = dbc.Container([
     ),
 
     html.Br(),
-
+  
     # --- Filters Section --- #
     # create section with filters 
     dbc.Card([
@@ -53,7 +53,7 @@ app.layout = dbc.Container([
                     dcc.Dropdown(
                         id="year-dropdown",
                         options=[{"label": y, "value": y} for y in sorted(table1["YEAR"].unique())],
-                        value=2017,
+                        value=2019,
                         placeholder="Select year...",
                         multi=False
                     ),
@@ -80,7 +80,7 @@ app.layout = dbc.Container([
                     dcc.Dropdown(
                         id='color-dem-dropdown',
                         options=[{'label': l.replace("_LABEL", "").replace("_", " ").title(), "value": l} for l in dem_labels],
-                        value="SEX_LABEL",
+                        value="RACE_GROUP_LABEL",
                         clearable=False,
                     ),
                 ], md=4),
@@ -90,7 +90,7 @@ app.layout = dbc.Container([
                     dcc.Dropdown(
                         id='bar-dem-dropdown',
                         options=[{'label': l.replace("_LABEL", "").replace("_", " ").title(), "value": l} for l in dem_labels],
-                        value="W2_GROUP_LABEL",
+                        value="SEX_LABEL",
                         clearable=False,
                     ),
                 ], md=4),
@@ -116,7 +116,7 @@ app.layout = dbc.Container([
     # --- Tabs --- #
     dbc.Tabs([
         dbc.Tab(label='Bar Plot', tab_id='bar'),
-        dbc.Tab(label='Receipt Trends', tab_id='line'),
+        dbc.Tab(label='Time Series', tab_id='line'),
     ], id='plot-tabs', active_tab='bar'),
 
     html.Br(),
@@ -157,10 +157,20 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
         group_by_owner = owner_label_map.get(group_by, group_by)
         color_group_owner = owner_label_map.get(color_group, color_group) if color_group else None
 
-        # if group_by_owner not in df.columns:
-        #     return px.bar(title=f"Column {group_by_owner} not found in Owner data.")
-        # if color_group_owner and color_group_owner not in df.columns:
-        #     return px.bar(title=f"Column {color_group_owner} not found in Owner data.")
+        # removing totals:
+        
+        if group_by_owner in df.columns:
+            df = df[df[group_by_owner] != "All owners of nonemployer firms"]
+
+        if color_group_owner and color_group_owner != group_by_owner and color_group_owner in df.columns:
+            df = df[df[color_group_owner] != "All owners of nonemployer firms"]
+
+        
+        for base_col in dem_labels:
+            owner_col = owner_label_map.get(base_col)
+            if owner_col in df.columns and owner_col not in [group_by_owner, color_group_owner]:
+                if df[owner_col].nunique() > 1:
+                    df = df[df[owner_col] != "All owners of nonemployer firms"]
 
         group_cols = [group_by_owner]
         if color_group_owner and color_group_owner != group_by_owner:
@@ -180,15 +190,34 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
 
         if selected_industry != "All":
             df = df[df["NAICS2017_LABEL"] == selected_industry]
+  
+  # filtering out Totals: 
 
+        if group_by in df.columns:
+            df = df[df[group_by] != "Total"]
+
+        if color_group and color_group != group_by and color_group in df.columns:
+            df = df[df[color_group] != "Total"]
+
+        for col in dem_labels:
+            if col in df.columns and col not in [group_by, color_group]:
+                if df[col].nunique() > 1:
+                    df = df[df[col] != "Total"]
+                
         group_cols = [group_by]
         if color_group and color_group != group_by:
             group_cols.append(color_group)
 
-        bar_df = df.groupby(group_cols, as_index=False).agg(
-            y_value=(y_metric, "sum")
-        )
+        # update to handle diff metrics:
+        if y_metric == "FIRMNOPD":
+            bar_df = df.groupby(group_cols, as_index=False).agg(y_value=("FIRMNOPD", "sum"))
+        elif y_metric == "RCPNOPD":
+            bar_df = df.groupby(group_cols, as_index=False).agg(y_value=("RCPNOPD", "sum"))
+        elif y_metric == "AVG_REVENUE_PER_FIRM":
+            bar_df = df.groupby(group_cols, as_index=False).agg(y_value=("AVG_REVENUE_PER_FIRM", "mean"))
 
+    
+    # plotting:
     y_axis_labels = {
         "FIRMNOPD": "Firm Counts",
         "RCPNOPD": "Business Receipts ($1000s)",
@@ -196,11 +225,16 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
         "OWNNOPD": "Owner Counts"
     }
 
+    print("bar_df shape:", bar_df.shape)
+    print("bar_df columns:", bar_df.columns.tolist())
+    print(bar_df.head(10))
+    
+
     fig = px.bar(
         bar_df,
         x=group_cols[0],
         y="y_value",
-        color=group_cols[1] if len(group_cols) > 1 else None,
+        color=group_cols[1] if len(group_cols) > 1 and group_cols[1] in bar_df.columns else None,
         barmode="group",
         labels={
             "y_value": y_axis_labels.get(y_metric, y_metric),
@@ -229,7 +263,7 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
 
 
 
-def update_line_plot(selected_industry, selected_years, y_metric):
+def update_line_plot(selected_industry, y_metric):
     if y_metric == "OWNNOPD":
         df = table_owner.copy()
         df = df[df["OWNER_RACE_LABEL"] != "All owners of nonemployer firms"]
@@ -242,7 +276,8 @@ def update_line_plot(selected_industry, selected_years, y_metric):
 
         if selected_industry and selected_industry != "All":
             df = df[df["NAICS2017_LABEL"] == selected_industry]
-
+        
+    
         # Always group by both year and industry for line plot
         group_cols = ["YEAR", "NAICS2017_LABEL"]
 
@@ -266,10 +301,10 @@ def update_line_plot(selected_industry, selected_years, y_metric):
     else:
         df = table1.copy()
 
-        if selected_years:
-            if not isinstance(selected_years, list):
-                selected_years = [selected_years]
-            df = df[df["YEAR"].isin(selected_years)]
+        # if selected_years:
+        #     if not isinstance(selected_years, list):
+        #         selected_years = [selected_years]
+        #     df = df[df["YEAR"].isin(selected_years)]
 
         if selected_industry and selected_industry != "All":
             df = df[df["NAICS2017_LABEL"] == selected_industry]
@@ -334,7 +369,7 @@ def render_tab_content(tab, x_dem, color_dem, y_metric, industry, year):
         return dcc.Graph(figure=fig)
 
     elif tab == 'line':
-        fig = update_line_plot(industry, year, y_metric)
+        fig = update_line_plot(industry, y_metric)
         return dcc.Graph(figure=fig)
 
 
