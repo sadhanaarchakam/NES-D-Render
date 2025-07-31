@@ -71,12 +71,12 @@ app.layout = dbc.Container([
                 ], md=6),
 
                 dbc.Col([
-                    html.Label("Filter by Industry:"),
+                    html.Label("Filter by Sector:"),
                     dcc.Dropdown(
                         id="industry-dropdown",
                         options=[{"label": industry, "value": industry} for industry in 
                                 sorted(table1["NAICS2017_LABEL"].unique())] +
-                                [{"label": "All Industries", "value": "All"}],
+                                [{"label": "All Sectors", "value": "All"}],
                         value="All",
                         clearable=False
                     )
@@ -153,33 +153,31 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
     if y_metric == "OWNNOPD":
         df = table_owner.copy()
 
-        df = df[df["OWNER_RACE_LABEL"] != "All owners of nonemployer firms"]
-        df["OWNER_SEX_LABEL"] = df["OWNER_SEX_LABEL"].str.replace("OWNER_SEX_LABEL=", "")
+        for col in owner_label_map.values():
+            if col in df.columns:
+                df[col] = df[col].astype(str).str.strip()
 
-        
         group_by_owner = owner_label_map.get(group_by, group_by)
         color_group_owner = owner_label_map.get(color_group, color_group) if color_group else None
-        
+
         if group_by_owner in df.columns:
             df = df[df[group_by_owner] != "All owners of nonemployer firms"]
 
         if color_group_owner and color_group_owner != group_by_owner and color_group_owner in df.columns:
             df = df[df[color_group_owner] != "All owners of nonemployer firms"]
 
-        
+        # filter dems w "All owners of nonemployer firms"
         for base_col in dem_labels:
             owner_col = owner_label_map.get(base_col)
             if owner_col in df.columns and owner_col not in [group_by_owner, color_group_owner]:
-                if df[owner_col].nunique() > 1:
-                    df = df[df[owner_col] != "All owners of nonemployer firms"]
+                df = df[df[owner_col] == "All owners of nonemployer firms"]
 
+        # groupby dems:
         group_cols = [group_by_owner]
         if color_group_owner and color_group_owner != group_by_owner:
             group_cols.append(color_group_owner)
 
-        bar_df = df.groupby(group_cols, as_index=False).agg(
-            y_value=("OWNNOPD", "sum")
-        )
+        bar_df = df.groupby(group_cols, as_index=False).agg(y_value=("OWNNOPD", "sum")) # use sum
 
     else:
         df = table1.copy()
@@ -202,12 +200,11 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
 
         for col in dem_labels:
             if col in df.columns and col not in [group_by, color_group]:
-                if df[col].nunique() > 1:
-                    df = df[df[col] != "Total"]
+                df = df[df[col] == "Total"]
                 
-        group_cols = [group_by]
-        if color_group and color_group != group_by:
-            group_cols.append(color_group)
+        # handle duplicate counts:
+        group_cols = [group_by, color_group] if color_group else [group_by]
+        group_cols = list(dict.fromkeys(group_cols))
 
         # update to handle diff metrics:
         if y_metric == "FIRMNOPD":
@@ -235,7 +232,7 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
         bar_df,
         x=group_cols[0],
         y="y_value",
-        color=group_cols[1] if len(group_cols) > 1 and group_cols[1] in bar_df.columns else None,
+        color=color_group if color_group != group_by and color_group in bar_df.columns else None,
         barmode="group",
         labels={
             "y_value": y_axis_labels.get(y_metric, y_metric),
