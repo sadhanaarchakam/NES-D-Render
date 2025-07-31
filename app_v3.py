@@ -1,16 +1,16 @@
 from click import group
 import pandas as pd
 import dash
-from dash import dcc, html, Input, Output
+from dash import State, dcc, html, Input, Output
 import plotly.express as px
 import dash_bootstrap_components as dbc
 
 # --------------Load & Prep Data-------------#
 
-# table1
-table1 = pd.read_excel("table_1_new.xlsx")
+# table5
+table1 = pd.read_excel("table_5_new.xlsx")
 
-dem_labels = ["SEX_LABEL", "RACE_GROUP_LABEL", "ETH_GROUP_LABEL", "FOREIGN_BORN_GROUP_LABEL", 
+dem_labels = ["SEX_LABEL", "RACE_GROUP_LABEL", "ETH_GROUP_LABEL", "FOREIGN_BORN_GROUP_LABEL", "LFO_LABEL",
               "VET_GROUP_LABEL", "W2_GROUP_LABEL" ]
 
 # owner table:
@@ -46,6 +46,75 @@ app.layout = dbc.Container([
         fluid=True
     ),
 
+    html.Br(),
+        #------- About Section ------#
+    # dropdown?
+    dbc.Card(
+        [
+            dbc.CardHeader(
+                dbc.Button(
+                    "About this Data",
+                    id="about-toggle",
+                    color="primary",
+                    n_clicks=0,
+                    style={"width": "100%", "textAlign": "left"}
+                ),
+                style={"padding": "0"}
+            ),
+            dbc.Collapse(
+                dbc.CardBody(
+                    [
+                        html.P(
+                            "This dashboard visualizes data from the U.S. Census Bureau's Nonemployer Statistics by Demographics (NES-D) Experimental Dataset, released from the years 2017 to 2019."
+                        ),
+                        html.P(
+                            "The NES-D provides new insights into nonemployer businesses, which are businesses that have no paid employees, are subject to federal income tax, and usually operate as sole proprietorships, partnerships, or corporations."
+                        ),
+                        html.P(
+                            "These businesses are often freelancers, gig workers, independent contractors, or self-employed individuals who contribute significantly to the U.S. economy despite not having payroll employees."
+                        ),
+                        html.P(
+                            "The NES-D experimental dataset links nonemployer business activity with (demographic) characteristics of business owners including:"
+                        ),
+                        html.Ul(
+                            [
+                                html.Li("Sex"),
+                                html.Li("Race"),
+                                html.Li("Ethnicity"),
+                                html.Li("Veteran Status"),
+                                html.Li("Foreign-Born Status"),
+                                html.Li("W2 Income Status"),
+                                html.Li("LFO Status"),
+                            ]
+                        ),
+                        html.P(
+                            [
+                                "For more information, visit the ",
+                                html.A(
+                                    "NES-D experimental data site",
+                                    href="https://www.census.gov/data/experimental-data-products/nes-d-wage-work-tables.html",
+                                    target="_blank",
+                                ),
+                                " or read the ",
+                                html.A(
+                                    "experimental methodology",
+                                    href="https://www2.census.gov/data/experimental-data-products/nes-d-wage-work-tables/methodology.pdf",
+                                    target="_blank",
+                                ),
+                                ".",
+                            ]
+                        ),
+                    ]
+                ),
+                id="about-collapse",
+                is_open=False,
+            ),
+        ],
+        style={
+            "borderRadius": "10px",
+        },
+    ),
+    
     html.Br(),
   
     # --- Filters Section --- #
@@ -151,37 +220,84 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
     
 
     if y_metric == "OWNNOPD":
+        owner_label_map = {
+        "SEX_LABEL": "OWNER_SEX_LABEL",
+        "RACE_GROUP_LABEL": "OWNER_RACE_LABEL",
+        "ETH_GROUP_LABEL": "OWNER_ETH_LABEL",
+        "VET_GROUP_LABEL": "OWNER_VET_LABEL",
+        "FOREIGN_BORN_GROUP_LABEL": "OWNER_FOREIGN_BORN_LABEL",
+        "W2_GROUP_LABEL": "OWNER_W2_LABEL"
+    }
+
+
+    if y_metric == "OWNNOPD":
         df = table_owner.copy()
 
-        for col in owner_label_map.values():
-            if col in df.columns:
-                df[col] = df[col].astype(str).str.strip()
+        unused_owner_cols = ["OWNER_AGE_LABEL", "OWNER_USCITIZEN_LABEL"]
+        df = df.drop(columns=[col for col in unused_owner_cols if col in df.columns], errors="ignore")
+
+        df = df[df["OWNER_RACE_LABEL"] != "All owners of nonemployer firms"]
+        df = df[df["NAICS2017_LABEL"] != "Total for all sectors"]
 
         group_by_owner = owner_label_map.get(group_by, group_by)
         color_group_owner = owner_label_map.get(color_group, color_group) if color_group else None
-
+        
+        # handling valid pairings 
+        valid_pair_bases = {"OWNER_RACE_LABEL", "OWNER_W2_LABEL"}
+        if not (valid_pair_bases & {group_by_owner, color_group_owner}):
+            return px.bar(title="Only combinations with RACE or W2 are supported for Owner Counts.")
+        
         if group_by_owner in df.columns:
             df = df[df[group_by_owner] != "All owners of nonemployer firms"]
 
         if color_group_owner and color_group_owner != group_by_owner and color_group_owner in df.columns:
             df = df[df[color_group_owner] != "All owners of nonemployer firms"]
 
-        # filter dems w "All owners of nonemployer firms"
-        for base_col in dem_labels:
-            owner_col = owner_label_map.get(base_col)
+        
+        for owner_col in owner_label_map.values():
+            # owner_col = owner_label_map.get(base_col)
             if owner_col in df.columns and owner_col not in [group_by_owner, color_group_owner]:
-                df = df[df[owner_col] == "All owners of nonemployer firms"]
+                if df[owner_col].nunique() > 1:
+                    df = df[df[owner_col] != "All owners of nonemployer firms"]
 
-        # groupby dems:
         group_cols = [group_by_owner]
         if color_group_owner and color_group_owner != group_by_owner:
             group_cols.append(color_group_owner)
 
-        bar_df = df.groupby(group_cols, as_index=False).agg(y_value=("OWNNOPD", "sum")) # use sum
+        bar_df = df.groupby(group_cols, as_index=False).agg(
+            y_value=("OWNNOPD", "sum")
+        )
+
+        # px.bar for OWNER:
+        fig = px.bar(
+            bar_df,
+            x=group_by_owner,
+            y="y_value",
+            color=color_group_owner if color_group_owner and color_group_owner in bar_df.columns else None,
+            barmode="group",
+            labels={
+                "y_value": "Owner Counts",
+                group_by_owner: group_by.replace("_LABEL", "").replace("_", " ").title(),
+                color_group_owner: color_group.replace("_LABEL", "").replace("_", " ").title() if color_group else None
+            },
+            title=f"Owner Counts by {group_by.replace('_LABEL', '').replace('_', ' ').title()}" +
+                  (f" and Colored by {color_group.replace('_LABEL', '').replace('_', ' ').title()}" if color_group and color_group != group_by else ""),
+            color_discrete_sequence=px.colors.qualitative.Safe
+        )
 
     else:
         df = table1.copy()
 
+        # remove minoity, nonminority, and equally
+        if "RACE_GROUP_LABEL" in df.columns:
+            exclude_terms = ["minority", "nonminority", "equally"]
+            df = df[~df["RACE_GROUP_LABEL"].str.lower().str.contains('|'.join(exclude_terms), na=False)]
+
+        if "ETH_GROUP_LABEL" in df.columns:
+            exclude_terms = ["equally"]
+            df = df[~df["ETH_GROUP_LABEL"].str.lower().str.contains('|'.join(exclude_terms), na=False)]
+        
+        
         if year_select:
             if not isinstance(year_select, list):
                 year_select = [year_select]
@@ -189,9 +305,11 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
 
         if selected_industry != "All":
             df = df[df["NAICS2017_LABEL"] == selected_industry]
+        else:
+            if "Total for all sectors" in df["NAICS2017_LABEL"].unique():
+                df = df[df["NAICS2017_LABEL"] == "Total for all sectors"]
   
-  # filtering out Totals: 
-
+        # filtering out Totals: 
         if group_by in df.columns:
             df = df[df[group_by] != "Total"]
 
@@ -200,7 +318,11 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
 
         for col in dem_labels:
             if col in df.columns and col not in [group_by, color_group]:
-                df = df[df[col] == "Total"]
+                # skip LFO unless it's being used
+                if col == "LFO_LABEL":
+                    continue
+                if "Total" in df[col].unique():
+                    df = df[df[col] == "Total"]
                 
         # handle duplicate counts:
         group_cols = [group_by, color_group] if color_group else [group_by]
@@ -214,36 +336,30 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
         elif y_metric == "AVG_REVENUE_PER_FIRM":
             bar_df = df.groupby(group_cols, as_index=False).agg(y_value=("AVG_REVENUE_PER_FIRM", "mean"))
 
-    
-    # plotting:
-    y_axis_labels = {
-        "FIRMNOPD": "Firm Counts",
-        "RCPNOPD": "Business Receipts ($1000s)",
-        "AVG_REVENUE_PER_FIRM": "Avg Receipts per Firm ($1000s)",
-        "OWNNOPD": "Owner Counts"
-    }
+            
+        # plotting for FIRM LEVEL:
+        y_axis_labels = {
+            "FIRMNOPD": "Firm Counts",
+            "RCPNOPD": "Business Receipts ($1000s)",
+            "AVG_REVENUE_PER_FIRM": "Avg Receipts per Firm ($1000s)",
+            "OWNNOPD": "Owner Counts"
+        }
 
-    print("bar_df shape:", bar_df.shape)
-    print("bar_df columns:", bar_df.columns.tolist())
-    print(bar_df.head(10))
-    
-
-    fig = px.bar(
-        bar_df,
-        x=group_cols[0],
-        y="y_value",
-        color=color_group if color_group != group_by and color_group in bar_df.columns else None,
-        barmode="group",
-        labels={
-            "y_value": y_axis_labels.get(y_metric, y_metric),
-            group_cols[0]: group_by.replace("_LABEL", "").replace("_", " ").title(),
-            group_cols[1] if len(group_cols) > 1 else "": color_group.replace("_LABEL", "").replace("_", " ").title() if color_group else None
-        },
-        title=f"{y_axis_labels.get(y_metric, y_metric)} by {group_by.replace('_LABEL', '').replace('_', ' ').title()}" +
-              (f" and Colored by {color_group.replace('_LABEL', '').replace('_', ' ').title()}" if color_group and color_group != group_by else ""),
-        color_discrete_sequence=px.colors.qualitative.Safe
-    )
-
+        fig = px.bar(
+            bar_df,
+            x=group_by,
+            y="y_value",
+            color=color_group if color_group and color_group in bar_df.columns else None,
+            barmode="group",
+            labels={
+                "y_value": y_axis_labels.get(y_metric, y_metric),
+                group_by: group_by.replace("_LABEL", "").replace("_", " ").title(),
+                color_group: color_group.replace("_LABEL", "").replace("_", " ").title() if color_group else None
+            },
+            title=f"{y_axis_labels.get(y_metric, y_metric)} by {group_by.replace('_LABEL', '').replace('_', ' ').title()}" +
+                  (f" and Colored by {color_group.replace('_LABEL', '').replace('_', ' ').title()}" if color_group and color_group != group_by else ""),
+            color_discrete_sequence=px.colors.qualitative.Safe
+        )
 
     # modify layout and style of plots: 
 
@@ -303,6 +419,8 @@ def update_line_plot(selected_industry, y_metric):
 
         if selected_industry and selected_industry != "All":
             df = df[df["NAICS2017_LABEL"] == selected_industry]
+
+        df = df[df["NAICS2017_LABEL"] != "Total for all sectors"]
         
         # remove totals:
         for col in dem_labels:
@@ -372,6 +490,16 @@ def render_tab_content(tab, x_dem, color_dem, y_metric, industry, year):
         fig = update_line_plot(industry, y_metric)
         return dcc.Graph(figure=fig)
 
+#-------------About Section Click Callback-------------#
+@app.callback(
+    Output("about-collapse", "is_open"),
+    Input("about-toggle", "n_clicks"),
+    State("about-collapse", "is_open")
+)
+def toggle_about_collapse(n_clicks, is_open):
+    if n_clicks:
+        return not is_open
+    return is_open
 
 if __name__ == '__main__':
     app.run(debug=True)
