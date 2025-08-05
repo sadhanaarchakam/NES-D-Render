@@ -197,6 +197,7 @@ app.layout = dbc.Container([
     dbc.Tabs([
         dbc.Tab(label='Bar Plot', tab_id='bar'),
         dbc.Tab(label='Time Series', tab_id='line'),
+        dbc.Tab(label = 'Stacked Area Plot', tab_id = 'stacked-plot')
     ], id='plot-tabs', active_tab='bar'),
 
     html.Br(),
@@ -215,7 +216,7 @@ app.layout = dbc.Container([
 ], fluid=True)
 
 
-#------------------- Create Plot Functions ---------------#
+#------------------- Bar Plot ---------------#
 def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_PER_FIRM", color_group=None):
     
 
@@ -376,7 +377,7 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
     return fig
 
 
-
+#------------------- Line Plot ---------------#
 def update_line_plot(selected_industry, y_metric):
     if y_metric == "OWNNOPD":
         df = table_owner.copy()
@@ -470,6 +471,80 @@ def update_line_plot(selected_industry, y_metric):
 
     return fig
 
+#------------------ Stacked Area Plot ---------------#
+def update_stacked_area_plot(industry, y_metric):
+    # owner count ratio:
+    if y_metric == "OWNNOPD":
+        df = table_owner.copy()
+
+        df = df[df["NAICS2017_LABEL"] != "Total for all sectors"]
+
+        if industry and industry != "All":
+            df = df[df["NAICS2017_LABEL"] == industry]
+        
+        for col in owner_label_map.values():
+            if col in df.columns and df[col].nunique() > 1:
+                df = df[df[col] != "All owners of nonemployer firms"]
+        
+        # group by year + industry 
+        group_df = df.groupby(["YEAR", "NAICS2017_LABEL"], as_index=False)["OWNNOPD"].sum()
+        # calc total and percentage (ratio):
+        group_df["TOTAL"] = group_df.groupby("YEAR")["OWNNOPD"].transform("sum")
+        group_df["PERCENTAGE"] = (group_df["OWNNOPD"] / group_df["TOTAL"]) * 100
+        # declare y metric:
+        y_label = "Owner Share (%)"
+
+    # firm count ratio + business receipt ratio:
+    else:
+        df = table1.copy()
+
+        # filter out totals:
+        for col in dem_labels:
+            if col in df.columns and df[col].nunique() > 1:
+                df = df[df[col] != "Total"]
+        # Filter out aggregate rows
+        df = df[df["NAICS2017_LABEL"] != "Total for all sectors"]
+        if industry and industry != "All":
+                df = df[df["NAICS2017_LABEL"] == industry]
+
+        # df = df[df["NAICS2017_LABEL"] != "Total for all sectors"]
+
+        # Group by year and industry and sum firm counts
+        group_df = df.groupby(["YEAR", "NAICS2017_LABEL"], as_index=False)[y_metric].sum()
+        # Calculate total firms per year
+        group_df["TOTAL"] = group_df.groupby("YEAR")[y_metric].transform("sum")
+        # Calculate percentage (ratio)
+        group_df["PERCENTAGE"] = (group_df[y_metric] / group_df["TOTAL"]) * 100
+
+        # choose which y_metric to use:
+        y_label = {
+            "FIRMNOPD": "Firm Share (%)",
+            "RCPNOPD": "Business Receipts Share (%)"
+        }.get(y_metric, "Share (%)")
+
+    # Plot
+    fig = px.area(
+        group_df,
+        x="YEAR",
+        y="PERCENTAGE",
+        color="NAICS2017_LABEL",
+        line_group="NAICS2017_LABEL",
+        labels={"PERCENTAGE": y_label, "NAICS2017_LABEL": "Industry", "YEAR": "Year"},
+        title=f"{y_label.replace(' (%)', '')} by Industry Over Time",
+        color_discrete_sequence=px.colors.qualitative.Safe
+    )
+
+    fig.update_layout(
+        title_x=0.5,
+        template="plotly_white",
+        yaxis_ticksuffix="%",
+        xaxis_tickangle=-45,
+        font=dict(family="Segoe UI", size=13)
+    )
+
+    return fig
+
+
 
 #-------------  Plot Callback with Tabs ----------------#
 @app.callback(
@@ -489,6 +564,41 @@ def render_tab_content(tab, x_dem, color_dem, y_metric, industry, year):
     elif tab == 'line':
         fig = update_line_plot(industry, y_metric)
         return dcc.Graph(figure=fig)
+    
+    elif tab == 'stacked-plot':
+        fig = update_stacked_area_plot(industry, y_metric)
+        return dcc.Graph(figure=fig)
+    
+
+# ----------------Clear Year Filter Callback=----------------#
+@app.callback(
+    Output('year-dropdown', 'value'),
+    Input('plot-tabs', 'active_tab')
+)
+def clear_year_filter(tab):
+    if tab in ['line', 'stacked-plot']:
+        return None  # Clear year filter for line and stacked plots
+    else:
+        # default as 2019
+        return 2019
+    
+#---------------Update Y-Metric Dropdown Options----------------#
+@app.callback(
+    Output('yaxis-metric-dropdown', 'options'),
+    Input('plot-tabs', 'active_tab'),
+)
+def update_ymetric_options(tab):
+    options = [
+        {'label': 'Firm Counts', 'value': 'FIRMNOPD'},
+        {'label': 'Owner Counts', 'value': 'OWNNOPD'},
+        {'label': 'Business Receipts', 'value': 'RCPNOPD'},
+        {'label': 'Avg Receipts per Firm', 'value': 'AVG_REVENUE_PER_FIRM'}
+    ]
+
+    if tab == 'stacked-plot':
+        options = [options for options in options if options['value'] != 'OWNNOPD']
+
+    return options
 
 #-------------About Section Click Callback-------------#
 @app.callback(
