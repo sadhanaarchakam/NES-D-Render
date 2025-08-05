@@ -47,7 +47,7 @@ app.layout = dbc.Container([
     ),
 
     html.Br(),
-        #------- About Section ------#
+    #------- About Section ------#
     # dropdown?
     dbc.Card(
         [
@@ -154,15 +154,29 @@ app.layout = dbc.Container([
 
             html.Br(), # tab for new row w filters for bar-plot specific 
 
+# add toggle (checkbox) for bar plot filter by dems (able to view just 1 dem or compare multiple)
             dbc.Row([
+                # add radio button single vs multiple dem comparison
                 dbc.Col([
-                    html.Label("Color By Demographic:"),
-                    dcc.Dropdown(
-                        id='color-dem-dropdown',
-                        options=[{'label': l.replace("_LABEL", "").replace("_", " ").title(), "value": l} for l in dem_labels],
-                        value="RACE_GROUP_LABEL",
-                        clearable=False,
+                    html.Label("Compare Two Demographics?"),
+                    dcc.RadioItems(
+                        id='multiplecomps-radio',
+                        options=[
+                            {'label': 'Yes', 'value': 'yes'},
+                            {'label': 'No', 'value': 'no'}
+                        ],
+                        value='yes',  # default to single comparison
+                        labelStyle={'display': 'inline-block', 'marginRight': '10px'},
                     ),
+                    html.Div([
+                        html.Label("Color By Demographic:"),
+                        dcc.Dropdown(
+                            id='color-dem-dropdown',
+                            options=[{'label': l.replace("_LABEL", "").replace("_", " ").title(), "value": l} for l in dem_labels],
+                            value="RACE_GROUP_LABEL",
+                            clearable=False,
+                        ),
+                    ], id='color-dem-container'),
                 ], md=4),
 
                 dbc.Col([
@@ -554,11 +568,14 @@ def update_stacked_area_plot(industry, y_metric):
     Input('color-dem-dropdown', 'value'),
     Input('yaxis-metric-dropdown', 'value'),
     Input('industry-dropdown', 'value'),
-    Input('year-dropdown', 'value')
+    Input('year-dropdown', 'value'),
+    Input('multiplecomps-radio', 'value')
 )
-def render_tab_content(tab, x_dem, color_dem, y_metric, industry, year):
+def render_tab_content(tab, x_dem, color_dem, y_metric, industry, year, compare_toggle):
     if tab == 'bar':
-        fig = update_plot(x_dem, year, industry, y_metric, color_dem)
+        # add toggle handling
+        color_value = color_dem if compare_toggle == 'yes' else None
+        fig = update_plot(x_dem, year, industry, y_metric, color_value)
         return dcc.Graph(figure=fig)
 
     elif tab == 'line':
@@ -568,7 +585,19 @@ def render_tab_content(tab, x_dem, color_dem, y_metric, industry, year):
     elif tab == 'stacked-plot':
         fig = update_stacked_area_plot(industry, y_metric)
         return dcc.Graph(figure=fig)
-    
+
+#---------------- Toggle Color By Dropdown ----------------#
+@app.callback(
+    Output('color-dem-container', 'style'),
+    Input('multiplecomps-radio', 'value'),
+    Input('plot-tabs', 'active_tab')
+)
+def toggle_colorby(cmp_val, tab):
+    # if not chosen, don't display color by, else display
+    if tab != 'bar' or cmp_val == 'no':
+        return {'display': 'none'}
+    return {'display': 'block'}
+
 
 # ----------------Clear Year Filter Callback=----------------#
 @app.callback(
