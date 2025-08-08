@@ -486,7 +486,7 @@ def update_line_plot(selected_industry, y_metric):
     return fig
 
 #------------------ Stacked Area Plot ---------------#
-def update_stacked_area_plot(industry, y_metric):
+def update_stacked_area_plot(industry, y_metric, x_dem):
     # owner count ratio:
     if y_metric == "OWNNOPD":
         df = table_owner.copy()
@@ -496,12 +496,15 @@ def update_stacked_area_plot(industry, y_metric):
         if industry and industry != "All":
             df = df[df["NAICS2017_LABEL"] == industry]
         
-        for col in owner_label_map.values():
-            if col in df.columns and df[col].nunique() > 1:
-                df = df[df[col] != "All owners of nonemployer firms"]
+        df = df[df[owner_label_map.get(x_dem, x_dem)] != "All owners of nonemployer firms"]
+        group_col = owner_label_map.get(x_dem, x_dem)
+
+        # for col in owner_label_map.values():
+        #     if col in df.columns and df[col].nunique() > 1:
+        #         df = df[df[col] != "All owners of nonemployer firms"]
         
-        # group by year + industry 
-        group_df = df.groupby(["YEAR", "NAICS2017_LABEL"], as_index=False)["OWNNOPD"].sum()
+        # group by year + x_dem (group_col) 
+        group_df = df.groupby(["YEAR", group_col], as_index=False)["OWNNOPD"].sum()
         # calc total and percentage (ratio):
         group_df["TOTAL"] = group_df.groupby("YEAR")["OWNNOPD"].transform("sum")
         group_df["PERCENTAGE"] = (group_df["OWNNOPD"] / group_df["TOTAL"]) * 100
@@ -513,18 +516,20 @@ def update_stacked_area_plot(industry, y_metric):
         df = table1.copy()
 
         # filter out totals:
-        for col in dem_labels:
-            if col in df.columns and df[col].nunique() > 1:
-                df = df[df[col] != "Total"]
+        # for col in dem_labels:
+        #     if col in df.columns and df[col].nunique() > 1:
+        #         df = df[df[col] != "Total"]
         # Filter out aggregate rows
-        df = df[df["NAICS2017_LABEL"] != "Total for all sectors"]
+        # df = df[df["NAICS2017_LABEL"] != "Total for all sectors"]
         if industry and industry != "All":
                 df = df[df["NAICS2017_LABEL"] == industry]
+
+        df = df[df[x_dem] != "Total"]
 
         # df = df[df["NAICS2017_LABEL"] != "Total for all sectors"]
 
         # Group by year and industry and sum firm counts
-        group_df = df.groupby(["YEAR", "NAICS2017_LABEL"], as_index=False)[y_metric].sum()
+        group_df = df.groupby(["YEAR", x_dem], as_index=False)[y_metric].sum()
         # Calculate total firms per year
         group_df["TOTAL"] = group_df.groupby("YEAR")[y_metric].transform("sum")
         # Calculate percentage (ratio)
@@ -541,10 +546,10 @@ def update_stacked_area_plot(industry, y_metric):
         group_df,
         x="YEAR",
         y="PERCENTAGE",
-        color="NAICS2017_LABEL",
-        line_group="NAICS2017_LABEL",
-        labels={"PERCENTAGE": y_label, "NAICS2017_LABEL": "Industry", "YEAR": "Year"},
-        title=f"{y_label.replace(' (%)', '')} by Industry Over Time",
+        color=group_col if y_metric == "OWNNOPD" else x_dem,
+        line_group=group_col if y_metric == "OWNNOPD" else x_dem,
+        labels={"PERCENTAGE": y_label, x_dem: x_dem.replace("_LABEL","").replace("_"," ").title()},
+        title=f"{y_label.replace(' (%)', '')} by {x_dem.replace('_LABEL','').replace('_',' ').title()} Over Time",
         color_discrete_sequence=px.colors.qualitative.Safe
     )
 
@@ -583,7 +588,7 @@ def render_tab_content(tab, x_dem, color_dem, y_metric, industry, year, compare_
         return dcc.Graph(figure=fig)
     
     elif tab == 'stacked-plot':
-        fig = update_stacked_area_plot(industry, y_metric)
+        fig = update_stacked_area_plot(industry, y_metric, x_dem)
         return dcc.Graph(figure=fig)
 
 #---------------- Toggle Color By Dropdown ----------------#
