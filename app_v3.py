@@ -28,6 +28,23 @@ owner_label_map = {
     "USCITIZEN_LABEL": "OWNER_USCITIZEN_LABEL"
 }
 
+
+# standardize labeling:
+def standardize_label(col):
+    
+    # map w legthen label names:
+    map = {
+        "Eth": "Ethnicity",
+        "Vet": "Veteran Status",
+        "W2": "Wage Work Status",
+        "Lfo": "LFO"
+    }
+
+    base = col.replace("OWNER_", "").replace("_GROUP", "").replace("_LABEL", "").replace("_", " ").title()
+    return map.get(base, base)
+
+standardize_label_map = {col: standardize_label(col) for col in dem_labels}
+
 # -------------Initialize Dash app----------#
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP]) # choose theme
 app.title = "Nonemployer Experimental Data Dashboard"
@@ -40,15 +57,15 @@ app.layout = dbc.Container([
     # --- Header/Navbar --- #
     dbc.NavbarSimple(
         brand=html.Strong("NES-D Dashboard: Nonemployer Firms by Demographics"),
-        style={"borderRadius": "10px"},
-        color="#1A73E8",
+        style={"borderRadius": "10px", "backgroundColor": "#1A73E8"},
+        color="primary",   # use a Bootstrap color name
         dark=True,
         fluid=True
     ),
 
     html.Br(),
-    #------- About Section ------#
-    # dropdown?
+
+    # ------- About Section ------ #
     dbc.Card(
         [
             dbc.CardHeader(
@@ -65,16 +82,16 @@ app.layout = dbc.Container([
                 dbc.CardBody(
                     [
                         html.P(
-                            "This dashboard visualizes data from the U.S. Census Bureau's Nonemployer Statistics by Demographics (NES-D) Experimental Dataset, released from the years 2017 to 2019."
+                            "This dashboard visualizes data from the U.S. Census Bureau's Nonemployer Statistics by Demographics (NES-D) Experimental Dataset for the years 2017 to 2019."
                         ),
                         html.P(
-                            "The NES-D provides new insights into nonemployer businesses, which are businesses that have no paid employees, are subject to federal income tax, and usually operate as sole proprietorships, partnerships, or corporations."
+                            "The NES-D provides new insights into nonemployer businesses, which are businesses that have no paid employees, are subject to federal income tax."
                         ),
                         html.P(
-                            "These businesses are often freelancers, gig workers, independent contractors, or self-employed individuals who contribute significantly to the U.S. economy despite not having payroll employees."
+                            "Nonemployers contribute significantly to the U.S. economy despite not having payroll employees, and they are often freelancers, gig workers, independent contractors, or self-employed individuals who contribute significantly to the U.S. economy despite not having payroll employees."
                         ),
                         html.P(
-                            "The NES-D experimental dataset links nonemployer business activity with (demographic) characteristics of business owners including:"
+                            "The NES-D experimental dataset reports statistics on nonemployer business activity with (demographic) characteristics of business owners including:"
                         ),
                         html.Ul(
                             [
@@ -83,8 +100,16 @@ app.layout = dbc.Container([
                                 html.Li("Ethnicity"),
                                 html.Li("Veteran Status"),
                                 html.Li("Foreign-Born Status"),
-                                html.Li("W2 Income Status"),
-                                html.Li("LFO Status"),
+                                html.Li("Wage Work Status")
+                            ]
+                        ),
+                        html.P(
+                            "The NES-D experimental dataset additionally reports statistics by nonemployer business characteristics including: "
+                        ),
+                        html.Ul(
+                            [
+                                html.Li("Sector"),
+                                html.Li("Legal Form of Organization (LFO) ")
                             ]
                         ),
                         html.P(
@@ -110,22 +135,18 @@ app.layout = dbc.Container([
                 is_open=False,
             ),
         ],
-        style={
-            "borderRadius": "10px",
-        },
+        style={"borderRadius": "10px"},
     ),
-    
+
     html.Br(),
-  
+
     # --- Filters Section --- #
-    # create section with filters 
     dbc.Card([
         dbc.CardHeader(
-        "Filter Options",
-        style={
-            "backgroundColor": "#1A73E8",
-            "color": "white"
-        }, className="shadow-sm"),
+            "Filter Options",
+            style={"backgroundColor": "#1A73E8", "color": "white"},
+            className="shadow-sm"
+        ),
         dbc.CardBody([
             dbc.Row([
                 dbc.Col([
@@ -143,8 +164,8 @@ app.layout = dbc.Container([
                     html.Label("Filter by Sector:"),
                     dcc.Dropdown(
                         id="industry-dropdown",
-                        options=[{"label": industry, "value": industry} for industry in 
-                                sorted(table1["NAICS2017_LABEL"].unique())] +
+                        options=[{"label": industry, "value": industry}
+                                 for industry in sorted(table1["NAICS2017_LABEL"].unique())] +
                                 [{"label": "All Sectors", "value": "All"}],
                         value="All",
                         clearable=False
@@ -152,38 +173,31 @@ app.layout = dbc.Container([
                 ], md=6),
             ]),
 
-            html.Br(), # tab for new row w filters for bar-plot specific 
+            html.Br(),
 
-# add toggle (checkbox) for bar plot filter by dems (able to view just 1 dem or compare multiple)
+            # Bar-plot controls
             dbc.Row([
-                # add radio button single vs multiple dem comparison
                 dbc.Col([
-                    html.Label("Compare Two Demographics?"),
-                    dcc.RadioItems(
-                        id='multiplecomps-radio',
-                        options=[
-                            {'label': 'Yes', 'value': 'yes'},
-                            {'label': 'No', 'value': 'no'}
-                        ],
-                        value='yes',  # default to single comparison
-                        labelStyle={'display': 'inline-block', 'marginRight': '10px'},
+                    html.Label("Color By Demographic:"),
+                    dcc.Dropdown(
+                        id='color-dem-dropdown',
+                        options=[{'label': standardize_label_map[col], 'value': col} for col in dem_labels],
+                        value="RACE_GROUP_LABEL",
+                        clearable=False,
                     ),
-                    html.Div([
-                        html.Label("Color By Demographic:"),
-                        dcc.Dropdown(
-                            id='color-dem-dropdown',
-                            options=[{'label': l.replace("_LABEL", "").replace("_", " ").title(), "value": l} for l in dem_labels],
-                            value="RACE_GROUP_LABEL",
-                            clearable=False,
-                        ),
-                    ], id='color-dem-container'),
+                    dbc.Checkbox(
+                        id="compare-toggle",
+                        value=False,
+                        label="Compare by second demographic",
+                        style={"marginTop": "8px"}
+                    ),
                 ], md=4),
 
                 dbc.Col([
                     html.Label("Select Demographic (X-Axis):"),
                     dcc.Dropdown(
                         id='bar-dem-dropdown',
-                        options=[{'label': l.replace("_LABEL", "").replace("_", " ").title(), "value": l} for l in dem_labels],
+                        options=[{'label': standardize_label_map[col], 'value': col} for col in dem_labels],
                         value="SEX_LABEL",
                         clearable=False,
                     ),
@@ -203,38 +217,49 @@ app.layout = dbc.Container([
                         clearable=False
                     )
                 ], md=4),
-            ])
-        ], style={"backgroundColor": "#f9f9f9"})
-    ], className="mb-4"),
+            ]),
 
-    # --- Tabs --- #
-    dbc.Tabs([
-        dbc.Tab(label='Bar Plot', tab_id='bar'),
-        dbc.Tab(label='Time Series', tab_id='line'),
-        dbc.Tab(label = 'Stacked Area Plot', tab_id = 'stacked-plot')
-    ], id='plot-tabs', active_tab='bar'),
+            # --- Tabs --- #
+            dbc.Tabs([
+                dbc.Tab(label='Bar Plot', tab_id='bar'),
+                dbc.Tab(label='Time Series', tab_id='line'),
+                dbc.Tab(label='Stacked Area Plot', tab_id='stacked-plot')
+            ], id='plot-tabs', active_tab='bar'),
 
-    html.Br(),
+            html.Br(),
 
-    # --- Plots --- #
-    # section for actual plots
-    dbc.Card([
-        dbc.CardBody([
-            dcc.Loading(
-                id="loading-plot",
-                type="default",
-                children=html.Div(id='plot-content')
-            )
+            # --- Plots --- #
+            dbc.Card([
+                dbc.CardBody([
+                    dcc.Loading(
+                        id="loading-plot",
+                        type="default",
+                        children=html.Div(id='plot-content')
+                    )
+                ])
+            ], style={"backgroundColor": "#f9f9f9"}),
         ])
-    ], style={"backgroundColor": "#f9f9f9"})
-], fluid=True)
+    ]),
 
+], fluid=True)
 
 #------------------- Bar Plot ---------------#
 def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_PER_FIRM", color_group=None):
     
 
+    # if y_metric == "OWNNOPD":
+    #     owner_label_map = {
+    #     "SEX_LABEL": "OWNER_SEX_LABEL",
+    #     "RACE_GROUP_LABEL": "OWNER_RACE_LABEL",
+    #     "ETH_GROUP_LABEL": "OWNER_ETH_LABEL",
+    #     "VET_GROUP_LABEL": "OWNER_VET_LABEL",
+    #     "FOREIGN_BORN_GROUP_LABEL": "OWNER_FOREIGN_BORN_LABEL",
+    #     "W2_GROUP_LABEL": "OWNER_W2_LABEL"
+    # }
+
+
     if y_metric == "OWNNOPD":
+
         owner_label_map = {
         "SEX_LABEL": "OWNER_SEX_LABEL",
         "RACE_GROUP_LABEL": "OWNER_RACE_LABEL",
@@ -242,10 +267,8 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
         "VET_GROUP_LABEL": "OWNER_VET_LABEL",
         "FOREIGN_BORN_GROUP_LABEL": "OWNER_FOREIGN_BORN_LABEL",
         "W2_GROUP_LABEL": "OWNER_W2_LABEL"
-    }
+        }
 
-
-    if y_metric == "OWNNOPD":
         df = table_owner.copy()
 
         unused_owner_cols = ["OWNER_AGE_LABEL", "OWNER_USCITIZEN_LABEL"]
@@ -257,10 +280,10 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
         group_by_owner = owner_label_map.get(group_by, group_by)
         color_group_owner = owner_label_map.get(color_group, color_group) if color_group else None
         
-        # handling valid pairings 
-        valid_pair_bases = {"OWNER_RACE_LABEL", "OWNER_W2_LABEL"}
-        if not (valid_pair_bases & {group_by_owner, color_group_owner}):
-            return px.bar(title="Only combinations with RACE or W2 are supported for Owner Counts.")
+        # # handling valid pairings 
+        # valid_pair_bases = {"OWNER_RACE_LABEL", "OWNER_W2_LABEL"}
+        # if not (valid_pair_bases & {group_by_owner, color_group_owner}):
+        #     return px.bar(title="Only combinations with RACE or W2 are supported for Owner Counts.")
         
         if group_by_owner in df.columns:
             df = df[df[group_by_owner] != "All owners of nonemployer firms"]
@@ -283,6 +306,9 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
             y_value=("OWNNOPD", "sum")
         )
 
+        x_pretty = standardize_label(group_by_owner)
+        c_pretty = standardize_label(color_group_owner) if color_group_owner else None
+
         # px.bar for OWNER:
         fig = px.bar(
             bar_df,
@@ -292,12 +318,12 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
             barmode="group",
             labels={
                 "y_value": "Owner Counts",
-                group_by_owner: group_by.replace("_LABEL", "").replace("_", " ").title(),
-                color_group_owner: color_group.replace("_LABEL", "").replace("_", " ").title() if color_group else None
+                group_by_owner: x_pretty,
+                color_group_owner: c_pretty if color_group_owner else None
             },
-            title=f"Owner Counts by {group_by.replace('_LABEL', '').replace('_', ' ').title()}" +
-                  (f" and Colored by {color_group.replace('_LABEL', '').replace('_', ' ').title()}" if color_group and color_group != group_by else ""),
-            color_discrete_sequence=px.colors.qualitative.Safe
+                title=f"Owner Counts by " + x_pretty + (
+                    f" and Colored by {c_pretty}" if color_group_owner and color_group_owner != group_by_owner else ""),
+                color_discrete_sequence=px.colors.qualitative.Safe
         )
 
     else:
@@ -360,6 +386,9 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
             "OWNNOPD": "Owner Counts"
         }
 
+        x_pretty = standardize_label(group_by)
+        c_pretty = standardize_label(color_group) if color_group else None
+
         fig = px.bar(
             bar_df,
             x=group_by,
@@ -368,16 +397,17 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
             barmode="group",
             labels={
                 "y_value": y_axis_labels.get(y_metric, y_metric),
-                group_by: group_by.replace("_LABEL", "").replace("_", " ").title(),
-                color_group: color_group.replace("_LABEL", "").replace("_", " ").title() if color_group else None
+                group_by: x_pretty,
+                color_group: c_pretty if color_group else None
             },
-            title=f"{y_axis_labels.get(y_metric, y_metric)} by {group_by.replace('_LABEL', '').replace('_', ' ').title()}" +
-                  (f" and Colored by {color_group.replace('_LABEL', '').replace('_', ' ').title()}" if color_group and color_group != group_by else ""),
+            title=(
+                f"{y_axis_labels.get(y_metric, y_metric)} by {x_pretty}"
+                + (f" and Colored by {c_pretty}" if color_group and color_group != group_by else "")
+            ),
             color_discrete_sequence=px.colors.qualitative.Safe
         )
 
     # modify layout and style of plots: 
-
     fig.update_layout(
         transition_duration=500,
         xaxis_tickangle=-45,
@@ -392,11 +422,12 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
 
 
 #------------------- Line Plot ---------------#
-def update_line_plot(selected_industry, y_metric):
+def update_line_plot(selected_industry, y_metric, x_dem = "NAICS2017_LABEL"):
+
     if y_metric == "OWNNOPD":
         df = table_owner.copy()
 
-        df = df[df["OWNER_RACE_LABEL"] != "All owners of nonemployer firms"]
+        # df = df[df["OWNER_RACE_LABEL"] != "All owners of nonemployer firms"]
         df = df[df["NAICS2017_LABEL"] != "Total for all sectors"]
 
         for base_col, owner_col in owner_label_map.items():
@@ -405,27 +436,27 @@ def update_line_plot(selected_industry, y_metric):
 
         if selected_industry and selected_industry != "All":
             df = df[df["NAICS2017_LABEL"] == selected_industry]
-
-        value_col = "OWNNOPD"                                                                                                                                                                                                      
-        label = "Owner Counts"
+                                                                                                                                                                                     
     
         # Always group by both year and industry for line plot
-        group_cols = ["YEAR", "NAICS2017_LABEL"]
+        group_col = ["YEAR", "NAICS2017_LABEL"]
 
-        line_df = df.groupby(group_cols, as_index=False)[value_col].sum()
+        line_df = df.groupby(["YEAR", group_col], as_index=False)[value_col].sum()
+
+        x_pretty = "Year"
+        c_pretty = standardize_label(group_col)
+        y_pretty = "Owner Counts"
 
         fig = px.line(
             line_df,
             x="YEAR",
             y=value_col,
-            color="NAICS2017_LABEL", 
+            color=group_col, 
             markers=True,
-            title="Owner Counts Over Time",
-            labels={
-                "YEAR": "Year",
-                value_col: label,
-                "NAICS2017_LABEL": "Industry" 
-            },
+            title= "Owner Counts over Time",
+            labels={"YEAR": x_pretty, 
+                    value_col: y_pretty, 
+                    group_col: c_pretty},
             color_discrete_sequence=px.colors.qualitative.Safe
         )
 
@@ -436,11 +467,21 @@ def update_line_plot(selected_industry, y_metric):
             df = df[df["NAICS2017_LABEL"] == selected_industry]
 
         df = df[df["NAICS2017_LABEL"] != "Total for all sectors"]
+
+        # df = df[df[group_dim] != "Total"]
+
+        # group_col = group_dim
+
+        # # if group_col in df.columns and df[group_col].nunique() > 1:
+        # #     df = df[df[group_col] != "Total"]
+        # if group_col in df.columns:
+        #     df = df[df[group_col] != "Total"]
         
         # remove totals:
         for col in dem_labels:
             if col in df.columns and df[col].nunique() > 1:
                 df = df[df[col] != "Total"]
+    
 
         value_col = y_metric
         label_map = {
@@ -448,9 +489,11 @@ def update_line_plot(selected_industry, y_metric):
             "RCPNOPD": "Business Receipts ($1000s)",
             "AVG_REVENUE_PER_FIRM": "Avg Receipts per Firm ($1000s)"
         }
-        label = label_map.get(value_col, value_col)
+
+        y_pretty = label_map.get(value_col, value_col)
 
         line_df = df.groupby(["YEAR", "NAICS2017_LABEL"])[value_col].sum().reset_index()
+        
 
         fig = px.line(
             line_df,
@@ -458,8 +501,8 @@ def update_line_plot(selected_industry, y_metric):
             y=value_col,
             color="NAICS2017_LABEL",
             markers=True,
-            title=f"{label} Trends by Industry",
-            labels={"YEAR": "Year", value_col: label},
+            title=f"{y_pretty} Trends by Industry",
+            labels={"YEAR": "Year", value_col: y_pretty},
             color_discrete_sequence=px.colors.qualitative.Safe
         )
 
@@ -498,10 +541,6 @@ def update_stacked_area_plot(industry, y_metric, x_dem):
         
         df = df[df[owner_label_map.get(x_dem, x_dem)] != "All owners of nonemployer firms"]
         group_col = owner_label_map.get(x_dem, x_dem)
-
-        # for col in owner_label_map.values():
-        #     if col in df.columns and df[col].nunique() > 1:
-        #         df = df[df[col] != "All owners of nonemployer firms"]
         
         # group by year + x_dem (group_col) 
         group_df = df.groupby(["YEAR", group_col], as_index=False)["OWNNOPD"].sum()
@@ -515,12 +554,6 @@ def update_stacked_area_plot(industry, y_metric, x_dem):
     else:
         df = table1.copy()
 
-        # filter out totals:
-        # for col in dem_labels:
-        #     if col in df.columns and df[col].nunique() > 1:
-        #         df = df[df[col] != "Total"]
-        # Filter out aggregate rows
-        # df = df[df["NAICS2017_LABEL"] != "Total for all sectors"]
         if industry and industry != "All":
                 df = df[df["NAICS2017_LABEL"] == industry]
 
@@ -542,14 +575,20 @@ def update_stacked_area_plot(industry, y_metric, x_dem):
         }.get(y_metric, "Share (%)")
 
     # Plot
+
+    x_pretty = standardize_label(x_dem)
+
     fig = px.area(
         group_df,
         x="YEAR",
         y="PERCENTAGE",
         color=group_col if y_metric == "OWNNOPD" else x_dem,
         line_group=group_col if y_metric == "OWNNOPD" else x_dem,
-        labels={"PERCENTAGE": y_label, x_dem: x_dem.replace("_LABEL","").replace("_"," ").title()},
-        title=f"{y_label.replace(' (%)', '')} by {x_dem.replace('_LABEL','').replace('_',' ').title()} Over Time",
+        labels={
+            "PERCENTAGE": y_label,
+            **({group_col: x_pretty} if y_metric == "OWNNOPD" else {x_dem: x_pretty})
+        },
+        title=f"{y_label.replace(' (%)', '')} by {x_pretty} Over Time",
         color_discrete_sequence=px.colors.qualitative.Safe
     )
 
@@ -574,34 +613,29 @@ def update_stacked_area_plot(industry, y_metric, x_dem):
     Input('yaxis-metric-dropdown', 'value'),
     Input('industry-dropdown', 'value'),
     Input('year-dropdown', 'value'),
-    Input('multiplecomps-radio', 'value')
+    Input('compare-toggle', 'value') 
 )
-def render_tab_content(tab, x_dem, color_dem, y_metric, industry, year, compare_toggle):
+def render_tab_content(tab, x_dem, color_dem, y_metric, industry, year, compare_on):
     if tab == 'bar':
         # add toggle handling
-        color_value = color_dem if compare_toggle == 'yes' else None
+        color_value = color_dem if (compare_on and color_dem and color_dem != x_dem) else None
         fig = update_plot(x_dem, year, industry, y_metric, color_value)
         return dcc.Graph(figure=fig)
 
     elif tab == 'line':
-        fig = update_line_plot(industry, y_metric)
+        fig = update_line_plot(industry, y_metric, x_dem)
         return dcc.Graph(figure=fig)
     
     elif tab == 'stacked-plot':
         fig = update_stacked_area_plot(industry, y_metric, x_dem)
         return dcc.Graph(figure=fig)
 
-#---------------- Toggle Color By Dropdown ----------------#
 @app.callback(
-    Output('color-dem-container', 'style'),
-    Input('multiplecomps-radio', 'value'),
-    Input('plot-tabs', 'active_tab')
+    Output("color-dem-dropdown", "disabled"),
+    Input("compare-toggle", "value"),
 )
-def toggle_colorby(cmp_val, tab):
-    # if not chosen, don't display color by, else display
-    if tab != 'bar' or cmp_val == 'no':
-        return {'display': 'none'}
-    return {'display': 'block'}
+def _disable_color_dropdown(compare_on):
+    return not bool(compare_on)
 
 
 # ----------------Clear Year Filter Callback=----------------#
