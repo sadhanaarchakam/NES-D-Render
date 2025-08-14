@@ -88,7 +88,7 @@ app.layout = dbc.Container([
                             "The NES-D provides new insights into nonemployer businesses, which are businesses that have no paid employees, are subject to federal income tax."
                         ),
                         html.P(
-                            "Nonemployers contribute significantly to the U.S. economy despite not having payroll employees, and they are often freelancers, gig workers, independent contractors, or self-employed individuals who contribute significantly to the U.S. economy despite not having payroll employees."
+                            "Nonemployers contribute significantly to the U.S. economy despite not having payroll employees, and they are often freelancers, gig workers, independent contractors, or self-employed individuals."
                         ),
                         html.P(
                             "The NES-D experimental dataset reports statistics on nonemployer business activity with (demographic) characteristics of business owners including:"
@@ -245,18 +245,6 @@ app.layout = dbc.Container([
 
 #------------------- Bar Plot ---------------#
 def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_PER_FIRM", color_group=None):
-    
-
-    # if y_metric == "OWNNOPD":
-    #     owner_label_map = {
-    #     "SEX_LABEL": "OWNER_SEX_LABEL",
-    #     "RACE_GROUP_LABEL": "OWNER_RACE_LABEL",
-    #     "ETH_GROUP_LABEL": "OWNER_ETH_LABEL",
-    #     "VET_GROUP_LABEL": "OWNER_VET_LABEL",
-    #     "FOREIGN_BORN_GROUP_LABEL": "OWNER_FOREIGN_BORN_LABEL",
-    #     "W2_GROUP_LABEL": "OWNER_W2_LABEL"
-    # }
-
 
     if y_metric == "OWNNOPD":
 
@@ -279,12 +267,7 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
 
         group_by_owner = owner_label_map.get(group_by, group_by)
         color_group_owner = owner_label_map.get(color_group, color_group) if color_group else None
-        
-        # # handling valid pairings 
-        # valid_pair_bases = {"OWNER_RACE_LABEL", "OWNER_W2_LABEL"}
-        # if not (valid_pair_bases & {group_by_owner, color_group_owner}):
-        #     return px.bar(title="Only combinations with RACE or W2 are supported for Owner Counts.")
-        
+     
         if group_by_owner in df.columns:
             df = df[df[group_by_owner] != "All owners of nonemployer firms"]
 
@@ -422,98 +405,135 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
 
 
 #------------------- Line Plot ---------------#
-def update_line_plot(selected_industry, y_metric, x_dem = "NAICS2017_LABEL"):
+def update_line_plot(selected_industry, y_metric, x_dem):
+ 
+ # using same structure as bar plot -> add x_dem filtering
+    
+    x_dem = x_dem or "NAICS2017_LABEL"
 
+    y_axis_labels = {
+        "FIRMNOPD": "Firm Counts",
+        "RCPNOPD": "Business Receipts ($1000s)",
+        "AVG_REVENUE_PER_FIRM": "Avg Receipts per Firm ($1000s)",
+        "OWNNOPD": "Owner Counts",
+    }
+
+    # owner level
     if y_metric == "OWNNOPD":
+        owner_label_map = {
+            "SEX_LABEL": "OWNER_SEX_LABEL",
+            "RACE_GROUP_LABEL": "OWNER_RACE_LABEL",
+            "ETH_GROUP_LABEL": "OWNER_ETH_LABEL",
+            "VET_GROUP_LABEL": "OWNER_VET_LABEL",
+            "FOREIGN_BORN_GROUP_LABEL": "OWNER_FOREIGN_BORN_LABEL",
+            "W2_GROUP_LABEL": "OWNER_W2_LABEL",
+        }
+
         df = table_owner.copy()
 
-        # df = df[df["OWNER_RACE_LABEL"] != "All owners of nonemployer firms"]
-        df = df[df["NAICS2017_LABEL"] != "Total for all sectors"]
+        
+        unused_owner_cols = ["OWNER_AGE_LABEL", "OWNER_USCITIZEN_LABEL"]
+        df = df.drop(columns=[c for c in unused_owner_cols if c in df.columns], errors="ignore")
 
-        for base_col, owner_col in owner_label_map.items():
-            if owner_col in df.columns and df[owner_col].nunique() > 1:
-                df = df[df[owner_col] != "All owners of nonemployer firms"]
-
+        
         if selected_industry and selected_industry != "All":
             df = df[df["NAICS2017_LABEL"] == selected_industry]
-                                                                                                                                                                                     
-    
-        # Always group by both year and industry for line plot
-        group_col = ["YEAR", "NAICS2017_LABEL"]
+        else:
+            if "Total for all sectors" in df["NAICS2017_LABEL"].unique():
+                df = df[df["NAICS2017_LABEL"] == "Total for all sectors"]
 
-        line_df = df.groupby(["YEAR", group_col], as_index=False)[value_col].sum()
+        group_by_owner = owner_label_map.get(x_dem, x_dem)
 
-        x_pretty = "Year"
-        c_pretty = standardize_label(group_col)
-        y_pretty = "Owner Counts"
+ 
+        if group_by_owner in df.columns:
+            df = df[df[group_by_owner] != "All owners of nonemployer firms"]
+
+        for owner_col in owner_label_map.values():
+            if owner_col in df.columns and owner_col != group_by_owner:
+                if df[owner_col].nunique() > 1:
+                    df = df[df[owner_col] != "All owners of nonemployer firms"]
+
+        group_cols = ["YEAR"]
+        if group_by_owner in df.columns:
+            group_cols.append(group_by_owner)
+
+        line_df = df.groupby(group_cols, as_index=False).agg(y_value=("OWNNOPD", "sum"))
+
+        g_pretty = standardize_label(group_by_owner) if group_by_owner in df.columns else None
+        title = "Owner Counts over Time" + (f" by {g_pretty}" if g_pretty else "")
 
         fig = px.line(
             line_df,
             x="YEAR",
-            y=value_col,
-            color=group_col, 
+            y="y_value",
+            color=(group_by_owner if group_by_owner in line_df.columns else None),
             markers=True,
-            title= "Owner Counts over Time",
-            labels={"YEAR": x_pretty, 
-                    value_col: y_pretty, 
-                    group_col: c_pretty},
+            labels={"YEAR": "Year", "y_value": y_axis_labels["OWNNOPD"], group_by_owner: g_pretty if g_pretty else None},
+            title=title,
             color_discrete_sequence=px.colors.qualitative.Safe
         )
 
+    # Firm level counts:
     else:
         df = table1.copy()
 
+        # remove "equally" for race/eth
+        if "RACE_GROUP_LABEL" in df.columns:
+            df = df[~df["RACE_GROUP_LABEL"].str.lower().str.contains("minority|nonminority|equally", na=False)]
+        if "ETH_GROUP_LABEL" in df.columns:
+            df = df[~df["ETH_GROUP_LABEL"].str.lower().str.contains("equally", na=False)]
+
         if selected_industry and selected_industry != "All":
             df = df[df["NAICS2017_LABEL"] == selected_industry]
+        else:
+            if "Total for all sectors" in df["NAICS2017_LABEL"].unique():
+                df = df[df["NAICS2017_LABEL"] == "Total for all sectors"]
 
-        df = df[df["NAICS2017_LABEL"] != "Total for all sectors"]
+        group_by = x_dem
 
-        # df = df[df[group_dim] != "Total"]
+        # Remove "Total" 
+        if group_by in df.columns:
+            df = df[df[group_by] != "Total"]
 
-        # group_col = group_dim
-
-        # # if group_col in df.columns and df[group_col].nunique() > 1:
-        # #     df = df[df[group_col] != "Total"]
-        # if group_col in df.columns:
-        #     df = df[df[group_col] != "Total"]
-        
-        # remove totals:
+       
         for col in dem_labels:
-            if col in df.columns and df[col].nunique() > 1:
-                df = df[df[col] != "Total"]
-    
+            if col in df.columns and col != group_by:
+                if col == "LFO_LABEL":
+                    continue
+                if "Total" in df[col].unique():
+                    df = df[df[col] == "Total"]
 
-        value_col = y_metric
-        label_map = {
-            "FIRMNOPD": "Firm Counts",
-            "RCPNOPD": "Business Receipts ($1000s)",
-            "AVG_REVENUE_PER_FIRM": "Avg Receipts per Firm ($1000s)"
-        }
+        # group by + year agg
+        group_cols = ["YEAR"]
+        if group_by in df.columns:
+            group_cols.append(group_by)
 
-        y_pretty = label_map.get(value_col, value_col)
+        if y_metric == "FIRMNOPD":
+            line_df = df.groupby(group_cols, as_index=False).agg(y_value=("FIRMNOPD", "sum"))
+        elif y_metric == "RCPNOPD":
+            line_df = df.groupby(group_cols, as_index=False).agg(y_value=("RCPNOPD", "sum"))
+        elif y_metric == "AVG_REVENUE_PER_FIRM":
+            line_df = df.groupby(group_cols, as_index=False).agg(y_value=("AVG_REVENUE_PER_FIRM", "mean"))
+        else:
+            line_df = df.groupby(group_cols, as_index=False).agg(y_value=(y_metric, "sum"))
 
-        line_df = df.groupby(["YEAR", "NAICS2017_LABEL"])[value_col].sum().reset_index()
-        
+        g_pretty = standardize_label(group_by) if group_by in df.columns else None
+        y_pretty = y_axis_labels.get(y_metric, y_metric)
+        title = f"{y_pretty} over Time" + (f" by {g_pretty}" if g_pretty else "")
 
         fig = px.line(
             line_df,
             x="YEAR",
-            y=value_col,
-            color="NAICS2017_LABEL",
+            y="y_value",
+            color=(group_by if group_by in line_df.columns else None),
             markers=True,
-            title=f"{y_pretty} Trends by Industry",
-            labels={"YEAR": "Year", value_col: y_pretty},
+            labels={"YEAR": "Year", "y_value": y_pretty, group_by: g_pretty if g_pretty else None},
+            title=title,
             color_discrete_sequence=px.colors.qualitative.Safe
         )
 
-    fig.update_traces(
-        mode="lines+markers",
-        marker=dict(
-            size=6,
-            line=dict(width=1, color='#d4d2d2')
-        )
-    )
-
+    
+    fig.update_traces(mode="lines+markers", marker=dict(size=6, line=dict(width=1, color="#d4d2d2")))
     fig.update_layout(
         template="plotly_white",
         transition_duration=500,
@@ -521,12 +541,12 @@ def update_line_plot(selected_industry, y_metric, x_dem = "NAICS2017_LABEL"):
         title_x=0.5,
         plot_bgcolor="#f9f9f9",
         paper_bgcolor="#ffffff",
-        font=dict(family="Segoe UI", size=13)
+        font=dict(family="Segoe UI", size=13),
     )
-    
-
 
     return fig
+
+
 
 #------------------ Stacked Area Plot ---------------#
 def update_stacked_area_plot(industry, y_metric, x_dem):
