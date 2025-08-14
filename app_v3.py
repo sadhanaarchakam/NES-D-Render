@@ -305,6 +305,11 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
         x_pretty = standardize_label(group_by_owner)
         c_pretty = standardize_label(color_group_owner) if color_group_owner else None
 
+        dynamic_title = (
+            f"Owner Counts by {x_pretty}"
+            + (f" and Colored by {c_pretty}" if color_group_owner and color_group_owner != group_by_owner else "")
+        )
+
         # px.bar for OWNER:
         fig = px.bar(
             bar_df,
@@ -317,9 +322,10 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
                 group_by_owner: x_pretty,
                 color_group_owner: c_pretty if color_group_owner else None
             },
-                title=f"Owner Counts by " + x_pretty + (
-                    f" and Colored by {c_pretty}" if color_group_owner and color_group_owner != group_by_owner else ""),
-                color_discrete_sequence=px.colors.qualitative.Safe
+            color_discrete_sequence=px.colors.qualitative.Safe
+        )
+        fig.update_layout(
+            title={"text": dynamic_title, "x": 0.5, "xanchor": "center"}
         )
 
     else:
@@ -385,6 +391,11 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
         x_pretty = standardize_label(group_by)
         c_pretty = standardize_label(color_group) if color_group else None
 
+        dynamic_title = (
+            f"{y_axis_labels.get(y_metric, y_metric)} by {x_pretty}"
+            + (f" and Colored by {c_pretty}" if color_group and color_group != group_by else "")
+        )
+
         fig = px.bar(
             bar_df,
             x=group_by,
@@ -396,14 +407,25 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
                 group_by: x_pretty,
                 color_group: c_pretty if color_group else None
             },
-            title=(
-                f"{y_axis_labels.get(y_metric, y_metric)} by {x_pretty}"
-                + (f" and Colored by {c_pretty}" if color_group and color_group != group_by else "")
-            ),
             color_discrete_sequence=px.colors.qualitative.Safe
         )
+        fig.update_layout(
+            title={"text": dynamic_title, "x": 0.5, "xanchor": "center"}
+        )
+    
+    # # Add the info icon annotation
+    # fig.add_annotation(
+    #     text="ℹ",
+    #     xref="paper", yref="paper",
+    #     x=0.58,  # small offset from center
+    #     y=1.22,  # just above the plot area
+    #     showarrow=False,
+    #     font=dict(size=17, color="black"),
+    #     hovertext="This chart shows counts grouped by the selected demographic. "
+    #             "Use the 'Color by' checkbox to compare two demographics at once.",
+    #     hoverlabel=dict(bgcolor="white"),
+    # )
 
-    # modify layout and style of plots: 
     fig.update_layout(
         transition_duration=500,
         xaxis_tickangle=-45,
@@ -653,15 +675,102 @@ def render_tab_content(tab, x_dem, color_dem, y_metric, industry, year, compare_
         # add toggle handling
         color_value = color_dem if (compare_on and color_dem and color_dem != x_dem) else None
         fig = update_plot(x_dem, year, industry, y_metric, color_value)
-        return dcc.Graph(figure=fig)
+
+        title_text = getattr(fig.layout.title, "text", None) or "Bar Plot"
+        fig.update_layout(title=None)
+
+        return html.Div([
+            html.Div(
+                [
+                    html.Span(
+                        title_text,
+                        className="fw-bold",
+                        style={"fontSize": "1.5rem", "textAlign": "center", "flex": "1"}
+                    ),
+                    html.Span(
+                        "ℹ",
+                        id="barplot-info",
+                        className="ms-2",
+                        style={"cursor": "pointer", "color": "#0d6efd", "fontWeight": "600", "fontSize": "1.3rem"}
+                    ),
+                    dbc.Tooltip(
+                        "This chart shows values grouped by the selected demographic. "
+                        "Enable 'Color by demographic' to compare two demographic groups at once.",
+                        target="barplot-info",
+                        placement="right",
+                    ),
+                ],
+                className="d-flex align-items-center justify-content-center mb-2"
+            ),
+            dcc.Graph(figure=fig)
+        ])
 
     elif tab == 'line':
         fig = update_line_plot(industry, y_metric, x_dem)
-        return dcc.Graph(figure=fig)
+    
+        title_text = getattr(fig.layout.title, "text", None) or "Time Series Plot"
+        fig.update_layout(title=None)
+
+        return html.Div([
+            html.Div(
+                [
+                    html.Span(
+                        title_text,
+                        className="fw-bold",
+                        style={"fontSize": "1.5rem", "textAlign": "center", "flex": "1"}
+                    ),
+                    html.Span(
+                        "ℹ",
+                        id="lineplot-info",
+                        className="ms-2",
+                        style={"cursor": "pointer", "color": "#0d6efd",
+                            "fontWeight": "600", "fontSize": "1.3rem"}
+                    ),
+                    dbc.Tooltip(
+                        "This chart shows selected measure trends over time based on the selected demographic.",
+                        target="lineplot-info",
+                        placement="right",
+                    ),
+                ],
+                className="d-flex align-items-center justify-content-center mb-2"
+            ),
+            dcc.Graph(figure=fig)
+        ])
     
     elif tab == 'stacked-plot':
         fig = update_stacked_area_plot(industry, y_metric, x_dem)
-        return dcc.Graph(figure=fig)
+        # return dcc.Graph(figure=fig)
+
+        title_text = getattr(fig.layout.title, "text", None) or "Stacked Area Plot"
+        fig.update_layout(title=None)
+
+        return html.Div([
+            html.Div(
+                [
+                    html.Span(
+                        title_text,
+                        className="fw-bold",
+                        style={"fontSize": "1.5rem", "textAlign": "center", "flex": "1"}
+                    ),
+                    html.Span(
+                        "ℹ",
+                        id="stackedplot-info",
+                        className="ms-2",
+                        style={"cursor": "pointer", "color": "#0d6efd",
+                            "fontWeight": "600", "fontSize": "1.3rem"}
+                    ),
+                    dbc.Tooltip(
+                        "Displays the proportion of each category in the selected demographic "
+                        "across the time period shown for the selected demographic.",
+                        target="stackedplot-info",
+                        placement="right",
+                    ),
+                ],
+                className="d-flex align-items-center justify-content-center mb-2"
+            ),
+            dcc.Graph(figure=fig)
+        ])
+
 
 #------Hide Dropdown when Checkbox--------
 @app.callback(
@@ -692,7 +801,6 @@ def clear_year_filter(tab):
 )
 def update_x_dem_options(y_metric, graph_type):
     dem_options = [
-        {"label": "Industry", "value": "NAICS2017_LABEL"},
         {"label": "Sex", "value": "SEX_LABEL"},
         {"label": "Race", "value": "RACE_GROUP_LABEL"},
         {"label": "Ethnicity", "value": "ETH_GROUP_LABEL"},
@@ -702,29 +810,29 @@ def update_x_dem_options(y_metric, graph_type):
         {"label": "Legal Form of Organization", "value": "LFO_LABEL"}
     ]
 
-    # take out LFO label is owner counts
-    if y_metric == "OWNNOPD" and graph_type in ["bar", "line"]:  
+    # take out LFO label if owner counts
+    if y_metric == "OWNNOPD" and graph_type in ["bar", "line", "stacked-plot"]:  
         dem_options = [opt for opt in dem_options if opt["value"] != "LFO_LABEL"]
 
     return dem_options    
 
-#---------------Update Y-Metric Dropdown Options----------------#
-@app.callback(
-    Output('yaxis-metric-dropdown', 'options'),
-    Input('plot-tabs', 'active_tab'),
-)
-def update_ymetric_options(tab):
-    options = [
-        {'label': 'Firm Counts', 'value': 'FIRMNOPD'},
-        {'label': 'Owner Counts', 'value': 'OWNNOPD'},
-        {'label': 'Business Receipts', 'value': 'RCPNOPD'},
-        {'label': 'Avg Receipts per Firm', 'value': 'AVG_REVENUE_PER_FIRM'}
-    ]
+# #---------------Update Y-Metric Dropdown Options----------------#
+# @app.callback(
+#     Output('yaxis-metric-dropdown', 'options'),
+#     Input('plot-tabs', 'active_tab'),
+# )
+# def update_ymetric_options(tab):
+#     options = [
+#         {'label': 'Firm Counts', 'value': 'FIRMNOPD'},
+#         {'label': 'Owner Counts', 'value': 'OWNNOPD'},
+#         {'label': 'Business Receipts', 'value': 'RCPNOPD'},
+#         {'label': 'Avg Receipts per Firm', 'value': 'AVG_REVENUE_PER_FIRM'}
+#     ]
 
-    if tab == 'stacked-plot':
-        options = [options for options in options if options['value'] != 'OWNNOPD']
+#     if tab == 'stacked-plot':
+#         options = [options for options in options if options['value'] != 'OWNNOPD']
 
-    return options
+#     return options
 
 #-------------About Section Click Callback-------------#
 @app.callback(
