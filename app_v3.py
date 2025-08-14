@@ -150,7 +150,7 @@ app.layout = dbc.Container([
         dbc.CardBody([
             dbc.Row([
                 dbc.Col([
-                    html.Label("Filter by Year:"),
+                    html.Label("Filter by Year:", className="me-2 fw-semibold"),
                     dcc.Dropdown(
                         id="year-dropdown",
                         options=[{"label": y, "value": y} for y in sorted(table1["YEAR"].unique())],
@@ -161,7 +161,7 @@ app.layout = dbc.Container([
                 ], md=6),
 
                 dbc.Col([
-                    html.Label("Filter by Sector:"),
+                    html.Label("Filter by Sector:", className="me-2 fw-semibold"),
                     dcc.Dropdown(
                         id="industry-dropdown",
                         options=[{"label": industry, "value": industry}
@@ -178,33 +178,45 @@ app.layout = dbc.Container([
             # Bar-plot controls
             dbc.Row([
                 dbc.Col([
-                    html.Label("Color By Demographic:"),
-                    dcc.Dropdown(
-                        id='color-dem-dropdown',
-                        options=[{'label': standardize_label_map[col], 'value': col} for col in dem_labels],
-                        value="RACE_GROUP_LABEL",
-                        clearable=False,
-                    ),
-                    dbc.Checkbox(
-                        id="compare-toggle",
-                        value=False,
-                        label="Compare by second demographic",
-                        style={"marginTop": "8px"}
-                    ),
-                ], md=4),
-
-                dbc.Col([
-                    html.Label("Select Demographic (X-Axis):"),
+                    html.Label("Select Demographic (X-Axis):", className="me-2 fw-semibold"),
                     dcc.Dropdown(
                         id='bar-dem-dropdown',
                         options=[{'label': standardize_label_map[col], 'value': col} for col in dem_labels],
                         value="SEX_LABEL",
                         clearable=False,
                     ),
-                ], md=4),
+                
+                # ], md=4),
+                # dbc.Col([
+                #     # Label + checkbox on one line
+                    html.Div(
+                        [
+                            html.Span("Color by Second Demographic?", className="me-2 fw-semibold"),
+                            dbc.Checkbox(
+                                id="compare-toggle",
+                                value=False,
+                                label="",
+                                label_class_name="mb-0", 
+                            ),
+                        ],
+                        className="d-flex align-items-center gap-2"
+                    ),
+
+                    # The dropdown lives in its own container so we can hide/show it
+                    html.Div(
+                        dcc.Dropdown(
+                            id='color-dem-dropdown',
+                            options=[{'label': standardize_label(col), 'value': col} for col in dem_labels],
+                            value="RACE_GROUP_LABEL",
+                            clearable=False,
+                        ),
+                        id="color-dem-container",
+                        className="mt-2"
+                    ),
+                ], md=6),
 
                 dbc.Col([
-                    html.Label("Select Measure (Y-Axis):"),
+                    html.Label("Select Measure (Y-Axis):", className="me-2 fw-semibold"),
                     dcc.Dropdown(
                         id='yaxis-metric-dropdown',
                         options=[
@@ -216,8 +228,10 @@ app.layout = dbc.Container([
                         value='FIRMNOPD',
                         clearable=False
                     )
-                ], md=4),
+                ], md=6),
             ]),
+
+            html.Br(),
 
             # --- Tabs --- #
             dbc.Tabs([
@@ -239,8 +253,7 @@ app.layout = dbc.Container([
                 ])
             ], style={"backgroundColor": "#f9f9f9"}),
         ])
-    ]),
-
+    ])
 ], fluid=True)
 
 #------------------- Bar Plot ---------------#
@@ -650,13 +663,14 @@ def render_tab_content(tab, x_dem, color_dem, y_metric, industry, year, compare_
         fig = update_stacked_area_plot(industry, y_metric, x_dem)
         return dcc.Graph(figure=fig)
 
+#------Hide Dropdown when Checkbox--------
 @app.callback(
-    Output("color-dem-dropdown", "disabled"),
+    Output("color-dem-container", "style"),
     Input("compare-toggle", "value"),
 )
-def _disable_color_dropdown(compare_on):
-    return not bool(compare_on)
-
+def toggle_color_container(compare_on):
+    # show when checked, hide when unchecked
+    return {} if compare_on else {"display": "none"}
 
 # ----------------Clear Year Filter Callback=----------------#
 @app.callback(
@@ -669,7 +683,31 @@ def clear_year_filter(tab):
     else:
         # default as 2019
         return 2019
-    
+
+# ---------------Update Select Demogrpaghic (X-axis) Dropdown options ---------------#
+@app.callback(
+    Output("bar-dem-dropdown", "options"),
+    Input("yaxis-metric-dropdown", "value"),
+    Input("plot-tabs", "active_tab")
+)
+def update_x_dem_options(y_metric, graph_type):
+    dem_options = [
+        {"label": "Industry", "value": "NAICS2017_LABEL"},
+        {"label": "Sex", "value": "SEX_LABEL"},
+        {"label": "Race", "value": "RACE_GROUP_LABEL"},
+        {"label": "Ethnicity", "value": "ETH_GROUP_LABEL"},
+        {"label": "Veteran Status", "value": "VET_GROUP_LABEL"},
+        {"label": "Foreign Born Status", "value": "FOREIGN_BORN_GROUP_LABEL"},
+        {"label": "W2 Status", "value": "W2_GROUP_LABEL"},
+        {"label": "Legal Form of Organization", "value": "LFO_LABEL"}
+    ]
+
+    # take out LFO label is owner counts
+    if y_metric == "OWNNOPD" and graph_type in ["bar", "line"]:  
+        dem_options = [opt for opt in dem_options if opt["value"] != "LFO_LABEL"]
+
+    return dem_options    
+
 #---------------Update Y-Metric Dropdown Options----------------#
 @app.callback(
     Output('yaxis-metric-dropdown', 'options'),
