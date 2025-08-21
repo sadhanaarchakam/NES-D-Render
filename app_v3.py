@@ -7,7 +7,7 @@ import dash_bootstrap_components as dbc
 
 # --------------Load & Prep Data-------------#
 
-# table5
+# change: table5
 table1 = pd.read_excel("table_5_new.xlsx")
 
 dem_labels = ["SEX_LABEL", "RACE_GROUP_LABEL", "ETH_GROUP_LABEL", "FOREIGN_BORN_GROUP_LABEL", "LFO_LABEL",
@@ -16,18 +16,6 @@ dem_labels = ["SEX_LABEL", "RACE_GROUP_LABEL", "ETH_GROUP_LABEL", "FOREIGN_BORN_
 # owner table:
 table_owner = pd.read_excel("table_O1_new.xlsx")
 table_owner["OWNNOPD"] = pd.to_numeric(table_owner["OWNNOPD"], errors='coerce')
-
-owner_label_map = {
-    "SEX_LABEL": "OWNER_SEX_LABEL",
-    "RACE_GROUP_LABEL": "OWNER_RACE_LABEL",
-    "ETH_GROUP_LABEL": "OWNER_ETH_LABEL",
-    "VET_GROUP_LABEL": "OWNER_VET_LABEL",
-    "FOREIGN_BORN_GROUP_LABEL": "OWNER_FOREIGN_BORN_LABEL",
-    "W2_GROUP_LABEL": "OWNER_W2_LABEL",
-    "AGE_LABEL": "OWNER_AGE_LABEL",
-    "USCITIZEN_LABEL": "OWNER_USCITIZEN_LABEL"
-}
-
 
 # standardize labeling:
 def standardize_label(col):
@@ -58,7 +46,7 @@ app.layout = dbc.Container([
     dbc.NavbarSimple(
         brand=html.Strong("NES-D Dashboard: Nonemployer Firms by Demographics"),
         style={"borderRadius": "10px", "backgroundColor": "#1A73E8"},
-        color="primary",   # use a Bootstrap color name
+        color="primary",  
         dark=True,
         fluid=True
     ),
@@ -272,15 +260,18 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
 
         df = table_owner.copy()
 
+        
+        group_by_owner = owner_label_map.get(group_by, group_by)
+        color_group_owner = owner_label_map.get(color_group, color_group) if color_group else None
+
         unused_owner_cols = ["OWNER_AGE_LABEL", "OWNER_USCITIZEN_LABEL"]
         df = df.drop(columns=[col for col in unused_owner_cols if col in df.columns], errors="ignore")
 
         df = df[df["OWNER_RACE_LABEL"] != "All owners of nonemployer firms"]
         df = df[df["NAICS2017_LABEL"] != "Total for all sectors"]
 
-        group_by_owner = owner_label_map.get(group_by, group_by)
-        color_group_owner = owner_label_map.get(color_group, color_group) if color_group else None
      
+        # remove totals from active dimensions  
         if group_by_owner in df.columns:
             df = df[df[group_by_owner] != "All owners of nonemployer firms"]
 
@@ -289,7 +280,7 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
 
         
         for owner_col in owner_label_map.values():
-            # owner_col = owner_label_map.get(base_col)
+            # if owner dem is not being actively used
             if owner_col in df.columns and owner_col not in [group_by_owner, color_group_owner]:
                 if df[owner_col].nunique() > 1:
                     df = df[df[owner_col] != "All owners of nonemployer firms"]
@@ -302,6 +293,7 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
             y_value=("OWNNOPD", "sum")
         )
 
+        # title label
         x_pretty = standardize_label(group_by_owner)
         c_pretty = standardize_label(color_group_owner) if color_group_owner else None
 
@@ -331,7 +323,7 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
     else:
         df = table1.copy()
 
-        # remove minoity, nonminority, and equally
+        # remove minority, nonminority, and equally
         if "RACE_GROUP_LABEL" in df.columns:
             exclude_terms = ["minority", "nonminority", "equally"]
             df = df[~df["RACE_GROUP_LABEL"].str.lower().str.contains('|'.join(exclude_terms), na=False)]
@@ -352,10 +344,9 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
             if "Total for all sectors" in df["NAICS2017_LABEL"].unique():
                 df = df[df["NAICS2017_LABEL"] == "Total for all sectors"]
   
-        # filtering out Totals: 
+        # filtering out Totals for active dems used: 
         if group_by in df.columns:
             df = df[df[group_by] != "Total"]
-
         if color_group and color_group != group_by and color_group in df.columns:
             df = df[df[color_group] != "Total"]
 
@@ -365,9 +356,10 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
                 if col == "LFO_LABEL":
                     continue
                 if "Total" in df[col].unique():
+                    # keep only Total vals in unused cols to avoid double counts
                     df = df[df[col] == "Total"]
                 
-        # handle duplicate counts:
+        
         group_cols = [group_by, color_group] if color_group else [group_by]
         group_cols = list(dict.fromkeys(group_cols))
 
@@ -413,18 +405,6 @@ def update_plot(group_by, year_select, selected_industry, y_metric="AVG_REVENUE_
             title={"text": dynamic_title, "x": 0.5, "xanchor": "center"}
         )
     
-    # # Add the info icon annotation
-    # fig.add_annotation(
-    #     text="ℹ",
-    #     xref="paper", yref="paper",
-    #     x=0.58,  # small offset from center
-    #     y=1.22,  # just above the plot area
-    #     showarrow=False,
-    #     font=dict(size=17, color="black"),
-    #     hovertext="This chart shows counts grouped by the selected demographic. "
-    #             "Use the 'Color by' checkbox to compare two demographics at once.",
-    #     hoverlabel=dict(bgcolor="white"),
-    # )
 
     fig.update_layout(
         transition_duration=500,
@@ -530,7 +510,7 @@ def update_line_plot(selected_industry, y_metric, x_dem):
         if group_by in df.columns:
             df = df[df[group_by] != "Total"]
 
-       
+       # keep only totals for unused dem cols
         for col in dem_labels:
             if col in df.columns and col != group_by:
                 if col == "LFO_LABEL":
@@ -587,6 +567,16 @@ def update_line_plot(selected_industry, y_metric, x_dem):
 def update_stacked_area_plot(industry, y_metric, x_dem):
     # owner count ratio:
     if y_metric == "OWNNOPD":
+
+        owner_label_map = {
+            "SEX_LABEL": "OWNER_SEX_LABEL",
+            "RACE_GROUP_LABEL": "OWNER_RACE_LABEL",
+            "ETH_GROUP_LABEL": "OWNER_ETH_LABEL",
+            "VET_GROUP_LABEL": "OWNER_VET_LABEL",
+            "FOREIGN_BORN_GROUP_LABEL": "OWNER_FOREIGN_BORN_LABEL",
+            "W2_GROUP_LABEL": "OWNER_W2_LABEL",
+        }
+
         df = table_owner.copy()
 
         df = df[df["NAICS2017_LABEL"] != "Total for all sectors"]
@@ -602,7 +592,7 @@ def update_stacked_area_plot(industry, y_metric, x_dem):
         # calc total and percentage (ratio):
         group_df["TOTAL"] = group_df.groupby("YEAR")["OWNNOPD"].transform("sum")
         group_df["PERCENTAGE"] = (group_df["OWNNOPD"] / group_df["TOTAL"]) * 100
-        # declare y metric:
+        # y metric:
         y_label = "Owner Share (%)"
 
     # firm count ratio + business receipt ratio:
@@ -630,7 +620,6 @@ def update_stacked_area_plot(industry, y_metric, x_dem):
         }.get(y_metric, "Share (%)")
 
     # Plot
-
     x_pretty = standardize_label(x_dem)
 
     fig = px.area(
@@ -787,8 +776,9 @@ def toggle_color_container(compare_on):
     Input('plot-tabs', 'active_tab')
 )
 def clear_year_filter(tab):
+    # clear year for line + stacked area plots
     if tab in ['line', 'stacked-plot']:
-        return None  # Clear year filter for line and stacked plots
+        return None  
     else:
         # default as 2019
         return 2019
@@ -810,29 +800,24 @@ def update_x_dem_options(y_metric, graph_type):
         {"label": "Legal Form of Organization", "value": "LFO_LABEL"}
     ]
 
-    # take out LFO label if owner counts
+    # take out LFO label if using owner counts
     if y_metric == "OWNNOPD" and graph_type in ["bar", "line", "stacked-plot"]:  
         dem_options = [opt for opt in dem_options if opt["value"] != "LFO_LABEL"]
 
     return dem_options    
 
-# #---------------Update Y-Metric Dropdown Options----------------#
-# @app.callback(
-#     Output('yaxis-metric-dropdown', 'options'),
-#     Input('plot-tabs', 'active_tab'),
-# )
-# def update_ymetric_options(tab):
-#     options = [
-#         {'label': 'Firm Counts', 'value': 'FIRMNOPD'},
-#         {'label': 'Owner Counts', 'value': 'OWNNOPD'},
-#         {'label': 'Business Receipts', 'value': 'RCPNOPD'},
-#         {'label': 'Avg Receipts per Firm', 'value': 'AVG_REVENUE_PER_FIRM'}
-#     ]
-
-#     if tab == 'stacked-plot':
-#         options = [options for options in options if options['value'] != 'OWNNOPD']
-
-#     return options
+#------Reset Checkbox when switiching tabs--------#
+@app.callback(
+    Output("compare-toggle", "value"),
+    Input("plot-tabs", "active_tab"),
+    prevent_initial_call=True
+)
+def reset_compare_toggle(tab):
+    
+    if tab in ["line", "stacked-plot"]:
+        return False
+    
+    return dash.no_update
 
 #-------------About Section Click Callback-------------#
 @app.callback(
